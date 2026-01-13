@@ -102,6 +102,60 @@ class MarkdownGenerator:
         # 如果都没有，使用产品代码的大写形式
         return product_code.upper() if product_code else 'UNKNOWN'
     
+    def _get_api_base_path_from_url(self, category_url, product_code):
+        """
+        从分类URL中提取API基础路径
+        
+        某些产品的API文档使用不同的产品代码
+        例如：cloudpipeline的API文档使用/api-pipeline/而不是/api-cloudpipeline/
+        
+        Args:
+            category_url: 分类URL
+            product_code: 产品代码
+            
+        Returns:
+            str: API基础路径
+        """
+        # 从URL中提取API基础路径
+        # 格式：https://support.huaweicloud.com/api-{api_product_code}/...
+        # 或：https://support.huaweicloud.com/api/{api_product_code}/...
+        if '/api-' in category_url:
+            # 提取 /api-{product_code}/ 部分
+            parts = category_url.split('/api-')
+            if len(parts) > 1:
+                api_product_part = parts[1].split('/')[0]
+                return f"/api-{api_product_part}/"
+        elif '/api/' in category_url:
+            # 提取 /api/{product_code}/ 部分
+            parts = category_url.split('/api/')
+            if len(parts) > 1:
+                api_product_part = parts[1].split('/')[0]
+                return f"/api/{api_product_part}/"
+        
+        # 如果无法从URL提取，使用产品代码映射
+        api_product_code = self._get_api_product_code(product_code)
+        return f"/api-{api_product_code}/"
+    
+    def _get_api_product_code(self, product_code):
+        """
+        获取API文档使用的产品代码（可能需要映射）
+        
+        某些产品的API文档使用不同的产品代码
+        例如：cloudpipeline -> pipeline
+        
+        Args:
+            product_code: 原始产品代码
+            
+        Returns:
+            str: API文档使用的产品代码
+        """
+        # 产品代码映射表
+        code_mapping = {
+            'cloudpipeline': 'pipeline',  # cloudpipeline的API文档使用pipeline
+        }
+        
+        return code_mapping.get(product_code, product_code)
+    
     def _generate_product_markdown(self, product_short_name, categories, product_code):
         """
         生成单个产品的Markdown内容
@@ -228,7 +282,10 @@ class MarkdownGenerator:
             
             # 查找所有指向API文档的链接
             all_links = soup.find_all('a', href=True)
-            api_base_path = f"/api-{product_code}/"
+            
+            # 从分类URL中提取API基础路径（某些产品的API文档使用不同的产品代码）
+            # 例如：cloudpipeline的API文档使用/api-pipeline/而不是/api-cloudpipeline/
+            api_base_path = self._get_api_base_path_from_url(category_url, product_code)
             
             # 根据产品代码确定API URL模式
             # 支持多种格式：
@@ -280,27 +337,42 @@ class MarkdownGenerator:
                         f"{product_code}_02_0000",
                         f"{product_code}_api_0000",
                         f"{product_code}_03_0000",
+                        f"{product_code}_03_0005",  # API概览页面
                         "topic_300000000",  # CodeArts Check的分类页面
                     ]
                     
+                    # 也排除API产品代码的目录页面
+                    api_product_code = self._get_api_product_code(product_code)
+                    exclude_patterns.extend([
+                        f"{api_product_code}_02_0000",
+                        f"{api_product_code}_api_0000",
+                        f"{api_product_code}_03_0000",
+                        f"{api_product_code}_03_0005",
+                    ])
+                    
                     if any(pattern in filename for pattern in exclude_patterns):
+                        continue
+                    
+                    # 排除分类页面URL本身
+                    if full_url == category_url:
                         continue
                     
                     # 检查是否符合API模式
                     is_api = False
                     for api_pattern in api_patterns:
                         if api_pattern is None:
-                            # 接受所有/api-{product_code}/下的链接（CodeArts Check格式）
+                            # 接受所有/api-{product_code}/或/api/{product_code}/下的链接
                             # 但排除明显的非API链接
                             exclude_patterns = [
                                 'api_0000',  # API目录页面
                                 'api_1000',  # API概览页面
                                 '_0000',     # 目录页面
+                                '_0005',     # 概览页面
                                 'topic_300000',  # 分类页面
                             ]
                             if not any(exclude in filename for exclude in exclude_patterns):
                                 # 排除链接文本为"API"的链接（通常是目录或概览页面）
-                                if text.strip().upper() != 'API':
+                                if text.strip().upper() != 'API' and text.strip() != 'API参考':
                                     is_api = True
                                     break
                         elif api_pattern in href:
@@ -312,6 +384,14 @@ class MarkdownGenerator:
                             if text.strip().upper() != 'API':
                                 is_api = True
                                 break
+                        else:
+                            # 对于pipeline等产品，API使用直接名称（如ListPipelineTemplates.html）
+                            # 检查是否是.html文件且不是分类页面
+                            if href.endswith('.html') and ('/api-' in href or '/api/' in href):
+                                # 排除明显的非API链接
+                                if text.strip().upper() not in ['API', 'API参考', '概览']:
+                                    is_api = True
+                                    break
                     
                     if is_api:
                         api_urls.append((text, full_url))

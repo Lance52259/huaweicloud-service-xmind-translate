@@ -215,16 +215,18 @@ def main():
         print("=" * 80)
         print(f"\n搜索关键词: {args.search}\n")
         
-        # 读取产品列表
-        products_file = args.products_file
-        if not os.path.exists(products_file):
-            print(f"错误: 找不到产品列表文件 {products_file}")
-            print("请先运行步骤1获取产品列表")
+        # 自动执行第一步获取产品列表（不保存文件）
+        print("正在获取产品列表（全局扫描）...")
+        print("-" * 80)
+        
+        fetcher = ProductFetcher()
+        products = fetcher.fetch_all_products()
+        
+        if not products:
+            print("错误: 未能获取到产品列表")
             return 1
         
-        import json
-        with open(products_file, 'r', encoding='utf-8') as f:
-            products = json.load(f)
+        print(f"成功获取 {len(products)} 个产品\n")
         
         # 搜索匹配的产品
         matched_products = search_products(args.search, products)
