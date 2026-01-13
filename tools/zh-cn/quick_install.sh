@@ -27,13 +27,50 @@ echo -e "${BLUE}========================================${NC}"
 # 检查必要的工具
 echo -e "${YELLOW}检查系统环境...${NC}"
 
-# 检查 Python3
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ 错误: 未找到 python3${NC}"
-    echo "请先安装 Python 3.6 或更高版本"
-    exit 1
+# 优先检查 Python3.10（根据用户规则要求）
+PYTHON_CMD=""
+PIP_CMD=""
+
+if command -v python3.10 &> /dev/null; then
+    PYTHON_CMD="python3.10"
+    echo -e "${GREEN}✓ Python3.10: $(python3.10 --version)${NC}"
+    # 检查 python3.10 的 pip
+    if python3.10 -m pip --version &> /dev/null; then
+        PIP_CMD="python3.10 -m pip"
+        echo -e "${GREEN}✓ pip (python3.10): $(python3.10 -m pip --version)${NC}"
+    elif command -v pip3.10 &> /dev/null; then
+        PIP_CMD="pip3.10"
+        echo -e "${GREEN}✓ pip3.10: $(pip3.10 --version)${NC}"
+    else
+        echo -e "${YELLOW}⚠ 警告: python3.10 未找到 pip，尝试使用 python3${NC}"
+    fi
 fi
-echo -e "${GREEN}✓ Python3: $(python3 --version)${NC}"
+
+# 如果没有找到 python3.10，回退到 python3
+if [ -z "$PYTHON_CMD" ]; then
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${RED}❌ 错误: 未找到 python3.10 或 python3${NC}"
+        echo "请先安装 Python 3.10 或更高版本（推荐使用 Python 3.10）"
+        exit 1
+    fi
+    PYTHON_CMD="python3"
+    echo -e "${YELLOW}⚠ 警告: 未找到 python3.10，使用 python3: $(python3 --version)${NC}"
+    echo -e "${YELLOW}⚠ 建议: 安装 Python 3.10 以获得更好的兼容性${NC}"
+    
+    # 检查 python3 的 pip
+    if ! command -v pip3 &> /dev/null; then
+        echo -e "${YELLOW}⚠ 警告: 未找到 pip3，尝试使用 python3 -m pip${NC}"
+        if ! python3 -m pip --version &> /dev/null; then
+            echo -e "${RED}❌ 错误: 未找到 pip${NC}"
+            echo "请先安装 pip"
+            exit 1
+        fi
+        PIP_CMD="python3 -m pip"
+    else
+        PIP_CMD="pip3"
+    fi
+    echo -e "${GREEN}✓ pip: $($PIP_CMD --version)${NC}"
+fi
 
 # 检查 Git
 if ! command -v git &> /dev/null; then
@@ -42,20 +79,6 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 echo -e "${GREEN}✓ Git: $(git --version)${NC}"
-
-# 检查 pip3
-if ! command -v pip3 &> /dev/null; then
-    echo -e "${YELLOW}⚠ 警告: 未找到 pip3，尝试使用 python3 -m pip${NC}"
-    if ! python3 -m pip --version &> /dev/null; then
-        echo -e "${RED}❌ 错误: 未找到 pip${NC}"
-        echo "请先安装 pip"
-        exit 1
-    fi
-    PIP_CMD="python3 -m pip"
-else
-    PIP_CMD="pip3"
-fi
-echo -e "${GREEN}✓ pip: $($PIP_CMD --version)${NC}"
 
 # 创建必要目录
 echo -e "${YELLOW}创建目录结构...${NC}"
@@ -105,7 +128,7 @@ else
 fi
 
 # 测试脚本是否可执行
-if python3 "$PYTHON_SCRIPT" --help > /dev/null 2>&1; then
+if $PYTHON_CMD "$PYTHON_SCRIPT" --help > /dev/null 2>&1; then
     echo -e "${GREEN}✓ 工具验证成功${NC}"
 else
     echo -e "${YELLOW}⚠ 警告: 工具验证返回非零退出码（这可能是正常的）${NC}"
@@ -131,11 +154,23 @@ if [ ! -f "\$TOOL_SCRIPT" ]; then
     exit 1
 fi
 
+# 检测 Python 版本（优先使用 python3.10）
+PYTHON_CMD=""
+if command -v python3.10 &> /dev/null; then
+    PYTHON_CMD="python3.10"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+else
+    echo "错误: 未找到 python3.10 或 python3"
+    echo "请先安装 Python 3.10 或更高版本"
+    exit 1
+fi
+
 # 切换到工具目录以确保相对导入正常工作
-cd "\$TOOL_DIR"
+cd "$TOOL_DIR"
 
 # 执行工具，传递所有参数
-exec python3 "\$TOOL_SCRIPT" "\$@"
+exec "\$PYTHON_CMD" "\$TOOL_SCRIPT" "\$@"
 EOF
 
 # 设置执行权限

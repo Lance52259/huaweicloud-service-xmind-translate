@@ -27,13 +27,50 @@ echo -e "${BLUE}========================================${NC}"
 # Check required tools
 echo -e "${YELLOW}Checking system environment...${NC}"
 
-# Check Python3
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Error: python3 not found${NC}"
-    echo "Please install Python 3.6 or higher"
-    exit 1
+# Prioritize checking Python3.10 (as per user requirements)
+PYTHON_CMD=""
+PIP_CMD=""
+
+if command -v python3.10 &> /dev/null; then
+    PYTHON_CMD="python3.10"
+    echo -e "${GREEN}✓ Python3.10: $(python3.10 --version)${NC}"
+    # Check pip for python3.10
+    if python3.10 -m pip --version &> /dev/null; then
+        PIP_CMD="python3.10 -m pip"
+        echo -e "${GREEN}✓ pip (python3.10): $(python3.10 -m pip --version)${NC}"
+    elif command -v pip3.10 &> /dev/null; then
+        PIP_CMD="pip3.10"
+        echo -e "${GREEN}✓ pip3.10: $(pip3.10 --version)${NC}"
+    else
+        echo -e "${YELLOW}⚠ Warning: pip not found for python3.10, trying python3${NC}"
+    fi
 fi
-echo -e "${GREEN}✓ Python3: $(python3 --version)${NC}"
+
+# Fallback to python3 if python3.10 not found
+if [ -z "$PYTHON_CMD" ]; then
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${RED}❌ Error: python3.10 or python3 not found${NC}"
+        echo "Please install Python 3.10 or higher (Python 3.10 recommended)"
+        exit 1
+    fi
+    PYTHON_CMD="python3"
+    echo -e "${YELLOW}⚠ Warning: python3.10 not found, using python3: $(python3 --version)${NC}"
+    echo -e "${YELLOW}⚠ Recommendation: Install Python 3.10 for better compatibility${NC}"
+    
+    # Check pip for python3
+    if ! command -v pip3 &> /dev/null; then
+        echo -e "${YELLOW}⚠ Warning: pip3 not found, trying python3 -m pip${NC}"
+        if ! python3 -m pip --version &> /dev/null; then
+            echo -e "${RED}❌ Error: pip not found${NC}"
+            echo "Please install pip"
+            exit 1
+        fi
+        PIP_CMD="python3 -m pip"
+    else
+        PIP_CMD="pip3"
+    fi
+    echo -e "${GREEN}✓ pip: $($PIP_CMD --version)${NC}"
+fi
 
 # Check Git
 if ! command -v git &> /dev/null; then
@@ -42,20 +79,6 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 echo -e "${GREEN}✓ Git: $(git --version)${NC}"
-
-# Check pip3
-if ! command -v pip3 &> /dev/null; then
-    echo -e "${YELLOW}⚠ Warning: pip3 not found, trying python3 -m pip${NC}"
-    if ! python3 -m pip --version &> /dev/null; then
-        echo -e "${RED}❌ Error: pip not found${NC}"
-        echo "Please install pip"
-        exit 1
-    fi
-    PIP_CMD="python3 -m pip"
-else
-    PIP_CMD="pip3"
-fi
-echo -e "${GREEN}✓ pip: $($PIP_CMD --version)${NC}"
 
 # Create necessary directories
 echo -e "${YELLOW}Creating directory structure...${NC}"
@@ -105,7 +128,7 @@ else
 fi
 
 # Test if script is executable
-if python3 "$PYTHON_SCRIPT" --help > /dev/null 2>&1; then
+if $PYTHON_CMD "$PYTHON_SCRIPT" --help > /dev/null 2>&1; then
     echo -e "${GREEN}✓ Tool verification successful${NC}"
 else
     echo -e "${YELLOW}⚠ Warning: Tool verification returned non-zero exit code (this may be normal)${NC}"
@@ -131,11 +154,23 @@ if [ ! -f "\$TOOL_SCRIPT" ]; then
     exit 1
 fi
 
+# Detect Python version (prioritize python3.10)
+PYTHON_CMD=""
+if command -v python3.10 &> /dev/null; then
+    PYTHON_CMD="python3.10"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+else
+    echo "Error: python3.10 or python3 not found"
+    echo "Please install Python 3.10 or higher"
+    exit 1
+fi
+
 # Change to tool directory to ensure relative imports work
-cd "\$TOOL_DIR"
+cd "$TOOL_DIR"
 
 # Execute tool, passing all arguments
-exec python3 "\$TOOL_SCRIPT" "\$@"
+exec "\$PYTHON_CMD" "\$TOOL_SCRIPT" "\$@"
 EOF
 
 # Set execute permissions
