@@ -1515,6 +1515,7 @@ class APICategoryFetcher:
                 possible_api_overview_urls = [
                     f"{self.BASE_URL}/api-{api_product_code}/{api_product_code}_03_0005.html",
                     f"{self.BASE_URL}/api-{api_product_code}/{api_product_code}_03_0000.html",
+                    f"{self.BASE_URL}/api-{api_product_code}/{api_product_code}_02_0000.html",
                 ]
                 
                 for overview_url in possible_api_overview_urls:
@@ -1522,6 +1523,57 @@ class APICategoryFetcher:
                     categories = self._extract_categories_from_api_overview(overview_url, api_product_code)
                     if categories:
                         logger.info(f"从API概览URL {overview_url} 提取到 {len(categories)} 个API分类")
+                        return categories
+                
+                # 对于pipeline产品，如果从概览页面没找到，尝试直接从progressive_knowledge页面提取所有分类链接
+                if api_product_code == 'pipeline':
+                    logger.debug(f"[调试] _parse_api_categories_from_progressive_knowledge: 尝试直接从progressive_knowledge页面提取pipeline分类链接")
+                    api_base_path = f"/api-{api_product_code}/"
+                    all_links = soup.find_all('a', href=True)
+                    
+                    seen_urls = set()
+                    for link in all_links:
+                        href = link.get('href', '')
+                        text = link.get_text(strip=True).strip()
+                        
+                        if not text or not href:
+                            continue
+                        
+                        # 过滤掉明显的非分类链接
+                        exclude_keywords = ['上一篇', '下一篇', '表', '查看PDF', 'PDF', '#', 'javascript:', '上一页', '下一页', 'API参考', '概览', '如何调用']
+                        if any(keyword in text for keyword in exclude_keywords):
+                            continue
+                        
+                        # 检查是否是分类链接（pipeline产品使用pipeline_03_XXXX.html格式）
+                        if api_base_path in href:
+                            full_url = urljoin(self.BASE_URL, href)
+                            
+                            if full_url.endswith('.pdf') or full_url in seen_urls:
+                                continue
+                            
+                            filename = full_url.split('/')[-1].split('.')[0]
+                            
+                            # 检查是否是分类页面（pipeline_03_XXXX.html，XXXX不是0000或0005）
+                            is_category = False
+                            if f"{api_product_code}_03_" in filename:
+                                # 排除概览页面和目录页面
+                                if not filename.endswith('_0000') and not filename.endswith('_0005'):
+                                    is_category = True
+                            
+                            if is_category:
+                                seen_urls.add(full_url)
+                                category_id = filename
+                                categories.append({
+                                    'name': text,
+                                    'url': full_url,
+                                    'category_id': category_id,
+                                    'subcategories': [],
+                                    'apis': []
+                                })
+                                logger.debug(f"[调试] _parse_api_categories_from_progressive_knowledge: 从progressive_knowledge页面提取到分类: {text} -> {full_url}")
+                    
+                    if categories:
+                        logger.info(f"从progressive_knowledge页面直接提取到 {len(categories)} 个API分类")
                         return categories
                 
             except Exception as e:
@@ -1582,7 +1634,7 @@ class APICategoryFetcher:
             response.encoding = 'utf-8'
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 查找表格（API分类通常在表格中）
+            # 方法1: 查找表格（API分类通常在表格中）
             tables = soup.find_all('table')
             logger.debug(f"[调试] _extract_categories_from_api_overview: 找到 {len(tables)} 个表格")
             
@@ -1603,8 +1655,8 @@ class APICategoryFetcher:
                         # 从表格行中提取API分类
                         for row in rows[1:]:  # 跳过表头
                             cells = row.find_all(['td', 'th'])
-                            if len(cells) >= 2:
-                                # 第一列通常是分类名称，第二列是描述
+                            if len(cells) >= 1:  # 至少有一列
+                                # 第一列通常是分类名称
                                 category_name = cells[0].get_text(strip=True)
                                 
                                 # 查找分类链接
@@ -1622,14 +1674,63 @@ class APICategoryFetcher:
                                     
                                     # 排除导航链接和PDF链接
                                     if not category_url.endswith('.pdf') and '/api-' in category_url:
-                                        categories.append({
-                                            'name': category_name,
-                                            'url': category_url,
-                                            'category_id': category_id,
-                                            'subcategories': [],
-                                            'apis': []
-                                        })
-                                        logger.debug(f"[调试] _extract_categories_from_api_overview: 提取到分类: {category_name} -> {category_url}")
+                                        # 检查是否已存在（去重）
+                                        if not any(cat['url'] == category_url for cat in categories):
+                                            categories.append({
+                                                'name': category_name,
+                                                'url': category_url,
+                                                'category_id': category_id,
+                                                'subcategories': [],
+                                                'apis': []
+                                            })
+                                            logger.debug(f"[调试] _extract_categories_from_api_overview: 提取到分类: {category_name} -> {category_url}")
+            
+            # 方法2: 如果表格方法没找到，尝试从链接列表提取（某些产品使用列表而非表格）
+            if not categories:
+                logger.debug(f"[调试] _extract_categories_from_api_overview: 表格方法未找到分类，尝试从链接列表提取")
+                api_base_path = f"/api-{api_product_code}/"
+                all_links = soup.find_all('a', href=True)
+                
+                seen_urls = set()
+                for link in all_links:
+                    href = link.get('href', '')
+                    text = link.get_text(strip=True).strip()
+                    
+                    if not text or not href:
+                        continue
+                    
+                    # 过滤掉明显的非分类链接
+                    exclude_keywords = ['上一篇', '下一篇', '表', '查看PDF', 'PDF', '#', 'javascript:', '上一页', '下一页', 'API参考', '概览', '如何调用']
+                    if any(keyword in text for keyword in exclude_keywords):
+                        continue
+                    
+                    # 检查是否是分类链接（pipeline产品使用pipeline_03_XXXX.html格式）
+                    if api_base_path in href:
+                        full_url = urljoin(self.BASE_URL, href)
+                        
+                        if full_url.endswith('.pdf') or full_url in seen_urls:
+                            continue
+                        
+                        filename = full_url.split('/')[-1].split('.')[0]
+                        
+                        # 检查是否是分类页面（pipeline_03_XXXX.html，XXXX不是0000或0005）
+                        is_category = False
+                        if f"{api_product_code}_03_" in filename:
+                            # 排除概览页面和目录页面
+                            if not filename.endswith('_0000') and not filename.endswith('_0005'):
+                                is_category = True
+                        
+                        if is_category:
+                            seen_urls.add(full_url)
+                            category_id = filename
+                            categories.append({
+                                'name': text,
+                                'url': full_url,
+                                'category_id': category_id,
+                                'subcategories': [],
+                                'apis': []
+                            })
+                            logger.debug(f"[调试] _extract_categories_from_api_overview: 从链接列表提取到分类: {text} -> {full_url}")
             
             logger.debug(f"[调试] _extract_categories_from_api_overview: 共提取到 {len(categories)} 个分类")
             
