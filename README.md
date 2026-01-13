@@ -13,39 +13,106 @@
 ```
 .
 ├── src/
-│   ├── cli.py                     # 统一命令行入口（推荐使用）
-│   ├── main.py                    # 第一步入口（已废弃）
-│   ├── step2_main.py              # 第二步入口（已废弃）
+│   ├── cli.py                      # 统一命令行入口（推荐使用）
+│   ├── main.py                     # 第一步入口（已废弃）
+│   ├── step2_main.py               # 第二步入口（已废弃）
 │   ├── scraper/
-│   │   ├── product_fetcher.py     # 产品列表抓取模块
+│   │   ├── product_fetcher.py      # 产品列表抓取模块
 │   │   └── api_category_fetcher.py # API分类抓取模块
 │   └── __init__.py
-├── requirements.txt               # Python依赖
-├── build.spec                     # PyInstaller打包配置
-├── build.sh                       # 打包脚本
-├── products.json                  # 抓取的产品列表（运行后生成）
-├── api_categories.json            # API分类数据（运行后生成）
-└── README.md                      # 项目说明
+├── tools/                          # 快速安装脚本
+│   ├── zh-cn/                      # 中文版安装脚本
+│   │   └── quick_install.sh
+│   └── en-us/                      # 英文版安装脚本
+│       └── quick_install.sh
+├── requirements.txt                # Python依赖
+├── build.spec                      # PyInstaller打包配置
+├── build.sh                        # 打包脚本
+├── products.json                   # 抓取的产品列表（运行后生成）
+├── api_categories.json             # API分类数据（运行后生成）
+└── README.md                       # 项目说明
 
 ```
 
-## 安装依赖
+## 快速安装
+
+推荐使用快速安装脚本，一键安装并配置环境：
+
+### 中文版安装脚本
+
+```bash
+# 下载并执行安装脚本
+curl -fsSL https://raw.githubusercontent.com/Lance52259/huaweicloud-service-xmind-translate/master/tools/zh-cn/quick_install.sh | bash
+
+# 或者先下载再执行
+wget https://raw.githubusercontent.com/Lance52259/huaweicloud-service-xmind-translate/master/tools/zh-cn/quick_install.sh
+chmod +x quick_install.sh
+./quick_install.sh
+```
+
+### 英文版安装脚本
+
+```bash
+# 下载并执行安装脚本
+curl -fsSL https://raw.githubusercontent.com/Lance52259/huaweicloud-service-xmind-translate/master/tools/en-us/quick_install.sh | bash
+
+# 或者先下载再执行
+wget https://raw.githubusercontent.com/Lance52259/huaweicloud-service-xmind-translate/master/tools/en-us/quick_install.sh
+chmod +x quick_install.sh
+./quick_install.sh
+```
+
+安装完成后，工具将安装到 `~/.local/share/xmind-translate`，可执行命令 `xmind-translate` 将添加到 `~/.local/bin`。
+
+**注意：** 安装完成后，请运行 `source ~/.bashrc`（或 `source ~/.zshrc`）来刷新环境变量，或者重新打开终端。
+
+## 手动安装
+
+### 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 安装
+### 克隆仓库
 
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/Lance52259/huaweicloud-service-xmind-translate.git
+cd huaweicloud-service-xmind-translate
 ```
 
 ## 使用方法
 
-### 基本用法
+### 使用快速安装后的命令
 
-使用统一的命令行工具 `src/cli.py`：
+如果使用快速安装脚本安装，可以直接使用 `xmind-translate` 命令：
+
+```bash
+# 扫描所有服务（执行所有步骤）
+xmind-translate
+
+# 只扫描指定的服务
+xmind-translate --category ecs,obs,rds
+
+# 扫描所有服务，但跳过某些服务
+xmind-translate --skip ecs,obs
+
+# 只执行第一步（获取产品列表）
+xmind-translate --step 1
+
+# 只执行第二步（获取API分类）
+xmind-translate --step 2
+
+# 只执行第三步（生成Markdown）
+xmind-translate --step 3
+
+# 搜索产品（当不确定产品代码时）
+xmind-translate --search CodeArts_Check
+```
+
+### 使用源代码运行
+
+如果手动安装或从源代码运行，使用统一的命令行工具 `src/cli.py`：
 
 ```bash
 # 扫描所有服务（执行所有步骤）
