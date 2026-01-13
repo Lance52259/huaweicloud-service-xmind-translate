@@ -298,16 +298,32 @@ class MarkdownGenerator:
             category_filename = category_url.split('/')[-1].split('.')[0]
             api_patterns = []
             
-            if category_filename.startswith('topic_'):
+            # 获取API产品代码（某些产品的API文档使用不同的产品代码）
+            api_product_code = self._get_api_product_code(product_code)
+            
+            # 特殊处理：pipeline等产品使用直接名称格式的API
+            if api_product_code == 'pipeline' or product_code == 'cloudpipeline':
+                # pipeline产品的API使用直接名称格式（如CreatePipelineTemplate.html）
+                # 分类可能使用pipeline_03_XXXX.html格式，但API使用直接名称
+                api_patterns = [None]  # None表示接受所有/api-pipeline/下的.html链接
+            elif category_filename.startswith('topic_'):
                 # CodeArts Check等产品：分类使用topic_格式，API使用直接名称
                 api_patterns = [None]  # None表示接受所有/api-{product_code}/下的链接
             elif f"{product_code}_02_" in category_filename:
                 api_patterns = [f"{product_code}_02_"]
             elif f"{product_code}_api_" in category_filename:
                 api_patterns = [f"{product_code}_api_"]
+            elif f"{api_product_code}_02_" in category_filename:
+                api_patterns = [f"{api_product_code}_02_"]
+            elif f"{api_product_code}_api_" in category_filename:
+                api_patterns = [f"{api_product_code}_api_"]
+            elif f"{api_product_code}_03_" in category_filename:
+                # pipeline等产品：分类使用_03_格式，API使用直接名称
+                api_patterns = [None]
             else:
                 # 默认尝试所有格式
-                api_patterns = [f"{product_code}_02_", f"{product_code}_api_", None]
+                api_patterns = [f"{product_code}_02_", f"{product_code}_api_", 
+                               f"{api_product_code}_02_", f"{api_product_code}_api_", None]
             
             api_urls = []
             for link in all_links:
@@ -370,11 +386,24 @@ class MarkdownGenerator:
                                 '_0005',     # 概览页面
                                 'topic_300000',  # 分类页面
                             ]
+                            
+                            # 对于pipeline产品，排除分类页面模式（pipeline_03_XXXX.html）
+                            if api_product_code == 'pipeline' or product_code == 'cloudpipeline':
+                                exclude_patterns.extend([
+                                    f"{api_product_code}_03_",  # 分类页面
+                                ])
+                            
                             if not any(exclude in filename for exclude in exclude_patterns):
                                 # 排除链接文本为"API"的链接（通常是目录或概览页面）
                                 if text.strip().upper() != 'API' and text.strip() != 'API参考':
-                                    is_api = True
-                                    break
+                                    # 对于pipeline产品，确保是.html文件
+                                    if api_product_code == 'pipeline' or product_code == 'cloudpipeline':
+                                        if href.endswith('.html'):
+                                            is_api = True
+                                            break
+                                    else:
+                                        is_api = True
+                                        break
                         elif api_pattern in href:
                             # 排除分类页面本身（格式：{product_code}_XX_XX00.html，XX00表示分类）
                             if filename.endswith('00') and len(filename.split('_')) >= 3:
@@ -390,8 +419,15 @@ class MarkdownGenerator:
                             if href.endswith('.html') and ('/api-' in href or '/api/' in href):
                                 # 排除明显的非API链接
                                 if text.strip().upper() not in ['API', 'API参考', '概览']:
-                                    is_api = True
-                                    break
+                                    # 对于pipeline产品，确保不是分类页面
+                                    if api_product_code == 'pipeline' or product_code == 'cloudpipeline':
+                                        # 排除分类页面模式（pipeline_03_XXXX.html）
+                                        if f"{api_product_code}_03_" not in filename:
+                                            is_api = True
+                                            break
+                                    else:
+                                        is_api = True
+                                        break
                     
                     if is_api:
                         api_urls.append((text, full_url))
